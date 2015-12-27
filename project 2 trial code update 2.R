@@ -9,7 +9,6 @@ library(stringr)
 library(data.table)
 library(ggplot2)
 library(lattice)
-library(reshape2)
 
 # download the data from the website, include date downloaded, and unzip
 # note that read.table can read bz2 files directly,
@@ -18,6 +17,8 @@ dataset_url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData
 fileDest <- sprintf("storm_%s.bz2", format(Sys.time(),"%Y_%m_%d_%H_%M_%S"))
 download.file(dataset_url, fileDest, mode = "wb", method = "libcurl")
 bunzip2(filename = fileDest, destname = "storm.csv")
+
+detach(R.utils)
 
 # import data and convert to tbl_df for dplyr
 data <- tbl_df(fread("repdata_data_StormData.csv",
@@ -29,7 +30,6 @@ data <- tbl_df(fread("repdata_data_StormData.csv",
                      select = c(1, 2, 5, 7, 8, 23:30, 37),
                      data.table = FALSE,
                      verbose = FALSE))
-
 (nRecords1 <- nrow(data))
 
 # rename and reorder variables; capitalise and trim EVTYPE
@@ -154,7 +154,7 @@ events_to_match <- storms %>%
         filter(eventTypeMatch == "FALSE") %>%
         select(eventType)
 events_to_match <- sort(unique(events_to_match$eventType))
-
+length(events_to_match)
 #####################################################################
 # function to map events_to_match (x) against keyTerms (y) and stdEvType (z, default)
 matchingGrep <-  function(x,y,z = stdEvType) {
@@ -242,7 +242,8 @@ stormsData <- storms %>%
         
 # further restrict to entries where effects on people, property or crops is >0
 stormsData <- stormsData %>%
-                filter(fatalities > 0 | injuries > 0 | propDamageCost > 0 | cropDamageCost)
+                filter(fatalities > 0 | injuries > 0 | 
+                               propDamageCost > 0 | cropDamageCost)
 # colSums(sapply(stormsData, is.na))
 
 (nRecords5 <- nrow(stormsData))
@@ -308,8 +309,8 @@ stormsData <- stormsData %>%
                         propDamageCost, cropDamageCost) 
 
 annualHumanData <- group_by(stormsData, year) %>%
-                        summarise(Fatalities = sum(fatalities),
-                                Injuries = sum(injuries))
+                        summarise(Fatalities = sum(fatalities, na.rm = TRUE),
+                                Injuries = sum(injuries, na.rm = TRUE))
 par(mfrow = c(2,1))
 barplot(height = annualHumanData$Fatalities, names.arg = annualHumanData$year,
         main = "Annual US Storm Fatalities 1996-2011",
@@ -321,10 +322,18 @@ barplot(height = annualHumanData$Injuries, names.arg = annualHumanData$year,
         ylab = "Injuries")
 par(mfrow = c(1,1))
 
-annualEconomicData <- filter(stormsData, year >= 2007) %>%
-                        group_by(year) %>%
-                        summarise(PropertyDamage = sum(propDamageCost/1.0e+9),
-                                CropDamage = sum(cropDamageCost/1.0e+9))
+
+
+
+
+
+
+
+
+
+annualEconomicData <- group_by(stormsData, year) %>%
+                        summarise(PropertyDamage = sum(propDamageCost/1.0e+9, na.rm = TRUE),
+                                CropDamage = sum(cropDamageCost/1.0e+9, na.rm = TRUE))
 par(mfrow = c(2,1))
 barplot(height = annualEconomicData$PropertyDamage, names.arg = annualEconomicData$year,
         main = "Annual US Property Damage 2007-2011",
@@ -336,18 +345,28 @@ barplot(height = annualEconomicData$CropDamage, names.arg = annualEconomicData$y
         ylab = "Dollars(billions)")
 par(mfrow = c(1,1))
 
-annualHumanData_byEvent <- filter(stormsData, year >= 2007) %>%
-        group_by(event) %>%
-        summarise(Fatalities = sum(fatalities),
-                  Injuries = sum(injuries)) %>%
-        arrange(desc(Fatalities + Injuries))
 
-annualEconomicData_byEvent <- filter(stormsData, year >= 2007) %>%
-        group_by(event) %>%
-        summarise(PropertyDamage = sum(propDamageCost/1.0e+9),
-                  CropDamage = sum(cropDamageCost/1.0e+9)) %>%
+library(xtable)
+annualHumanData_byEvent <- group_by(stormsData, event) %>%
+        summarise(Fatalities = sum(fatalities, na.rm = TRUE),
+                  Injuries = sum(injuries, na.rm = TRUE)) %>%
+        arrange(desc(Fatalities))
+humanImpact <- annualHumanData_byEvent %>%
+        filter(Fatalities >= 70) %>%
+        rename(Event = event)
+tab <- xtable(annualHumanData_byEvent)
+print(tab, type="html")
+
+
+annualEconomicData_byEvent <- group_by(stormsData, event) %>%
+                summarise(PropertyDamage = sum(propDamageCost/1.0e+9, na.rm = TRUE),
+                  CropDamage = sum(cropDamageCost/1.0e+9, na.rm = TRUE),
+                  TotalDamage = PropertyDamage + CropDamage) %>%
         arrange(desc(PropertyDamage + CropDamage))
-
+economicImpact <- annualEconomicData_byEvent %>%
+                filter(TotalDamage >= 0.0) %>%
+                rename(Event = event, Property = PropertyDamage,
+                       Crops = CropDamage,  Total = TotalDamage)
 
 
 rm(list = ls())
