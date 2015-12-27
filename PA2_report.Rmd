@@ -1,0 +1,453 @@
+---
+title: "Human and Economic Costs of Storms in the USA 1996-2011"
+author: "DJWilliamson"
+date: "28 December 2015"
+output: html_document
+keep_md: true
+---
+#Synopsis
+This study has examined the human and economic costs of severe weather events in the US over the period 1996-2007 using data from the NOAA. Data were excluded from offshore sites and earlier periods where the data were incomplete. The costs in the last 5 years (2007-2011) were predominantly attributable to winds/thunderstorms/hurricanes/typhoons but flooding (which of course may be associated with the former) and heat also contributed.
+
+#Background
+The aim of this study is to advise on which types of severe weather events (as classified in the NOAA database [eventTypes][1]) pose the greatest threat to population health (measured in numbers of fatalities/injuries) and which have the greatest economic impact. Although the raw data cover the period 1950-2011, the information prior to 1996, particularly the classification of events, was unreliable/incomplete and was excluded from the analysis. Only the last 5 years was considered for the economic analysis and no account was taken of inflation. The database contained information on US protectorates and marine areas but only the 51 states were considered in the final analysis [FIPScodes][2].
+
+#Data Processing
+
+##Data source
+The data are available at:  
+<https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2>
+
+##Code Book
+The dataset is stored in a comma-separated-value (csv) file. There are a total of 902297 observations.  
+
+Further information about variables included in this dataset are available:  
+* National Weather Service Storm Data Documentation [stormDatadocs][3]    
+* National Climatic Data Center Storm Events FAQ [FAQ][4]  
+* Storm Data Export Format [exportFormat][5]
+
+Additional code, figures from exploratory data analysis and relevant files are available in my GitHub repository:
+<https://github.com/DJamesWilliamson/Reproducible-Research-PA2>
+
+
+##Structure
+The steps in the data processing are:  
+1.      Downloading and unzipping the csv file (which may be omitted)  
+2.      Reading the file into R  
+3.      Renaming, selecting and adding variables  
+4.      Restricting the analysis to data from 1996 (see above)  
+5.      Examining and replacing the multipliers for cost calculations  
+6.      Restricting the analysis to events with a human or economic impact (2-stage) 
+7.      Standardising the event codes against the official classification
+8.      Restricting the geographical areas for the analysis to 51 states
+9.      Checking and where appropriate adjusting outliers
+
+Before commencing the analysis, create a folder for the data in the current directory and set it as the working directory (commented out as generally inadvisable to use setwd() in code):    
+```{r, echo = TRUE}
+# if(!file.exists("Storm_Data")) dir.create("Storm_Data")
+# setwd("./Storm_Data")
+```
+
+Then load the packages required for the analysis (installing them if necessary):     
+```{r, echo = TRUE}
+library(R.utils)
+library(dplyr)
+library(stringr)
+library(data.table)
+library(ggplot2)
+library(lattice)
+library(xtable)
+```
+
+================================================================================
+
+###Download and unzip the csv file
+```{r, echo = TRUE}
+dataset_url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+fileDest <- sprintf("storm_%s.bz2", format(Sys.time(),"%Y_%m_%d_%H_%M_%S"))
+download.file(dataset_url, fileDest, mode = "wb", method = "libcurl")
+bunzip2(filename = fileDest, destname = "storm.csv")
+```
+
+The date of download is included in the name of the zip file for future reference.
+
+###Read in the data and check
+```{r, echo = TRUE}
+data <- tbl_df(fread("repdata_data_StormData.csv",
+                     sep = ",",
+                     # nrows = 100,
+                     header = TRUE,
+                     na.strings = "",
+                     stringsAsFactors = FALSE,
+                     select = c(1, 2, 5, 7, 8, 23:30, 37),
+                     data.table = FALSE,
+                     verbose = FALSE))
+nRecords1 <- nrow(data)
+```
+
+At this stage there are `nRecords1` records.
+
+###Rename and reorder variables; capitalise and trim EVTYPE;remove original file:
+```{r, echo = TRUE}
+storms <- data %>%
+        rename(stateCode = STATE__,
+               beginDate = BGN_DATE,
+               countyCode = COUNTY,
+               state = STATE,
+               eventType = EVTYPE,
+               fatalities = FATALITIES,
+               injuries = INJURIES,
+               propDamage = PROPDMG,
+               propDamageExp = PROPDMGEXP,
+               cropDamage = CROPDMG,
+               cropDamageExp = CROPDMGEXP,
+               wfo = WFO,
+               stateOffice = STATEOFFIC,
+               refNum = REFNUM) %>%
+        select(refNum, beginDate, stateCode, state, countyCode, wfo, stateOffice,
+               eventType,
+               fatalities, injuries,
+               propDamage, propDamageExp,
+               cropDamage, cropDamageExp) %>%
+        mutate(eventType = toupper(eventType)) %>%
+        mutate(eventType = str_trim(eventType, "both"))
+rm(data)
+```
+
+
+###Change beginDate to class Date and filter records since 1996 (full data available):
+```{r, echo = TRUE}
+storms$beginDate <- str_replace(storms$beginDate, " 0:00:00", "")
+storms$beginDate <- as.Date(storms$beginDate, "%m/%d/%Y")
+storms <- storms %>%
+        filter(beginDate >= "1996-01-01") %>%
+        arrange(beginDate)
+nRecords2 <- nrow(storms)
+```
+
+At this stage there are `nRecords2` records.
+
+###Update critical variables (note one inappropriate propDamageExp, but no impact):  
+```{r, echo = TRUE}
+table(storms$propDamageExp)
+table(storms$cropDamageExp)
+
+storms %>% select(propDamageExp, fatalities, injuries, propDamage, cropDamage) %>%
+        group_by(propDamageExp) %>%
+        summarise(n = n(), people = sum(fatalities + injuries),
+                  damage = sum(propDamage + cropDamage)) %>%
+        arrange(desc(n))
+
+storms$propDamageExp <- replace(storms$propDamageExp,
+                                which(storms$propDamageExp == "0"), "NA")
+storms$propDamageExp <- replace(storms$propDamageExp,
+                                which(storms$propDamageExp == "K"), "1000")
+storms$propDamageExp <- replace(storms$propDamageExp,
+                                which(storms$propDamageExp == "M"), "1000000")
+storms$propDamageExp <- replace(storms$propDamageExp,
+                                which(storms$propDamageExp == "B"), "1000000000")
+storms$propDamageExp <- as.numeric(storms$propDamageExp)
+
+storms$cropDamageExp <- replace(storms$cropDamageExp,
+                                which(storms$cropDamageExp == "K"), "1000")
+storms$cropDamageExp <- replace(storms$cropDamageExp,
+                                which(storms$cropDamageExp == "M"), "1000000")
+storms$cropDamageExp <- replace(storms$cropDamageExp,
+                                which(storms$cropDamageExp == "B"), "1000000000")
+storms$cropDamageExp <- as.numeric(storms$cropDamageExp)
+```
+
+###Identify/exclude eventTypes where there is no damage to people, property or crops: 
+```{r, echo = TRUE}
+noDamageTable <- storms %>% select(eventType, fatalities, injuries,
+                                   propDamage, propDamageExp,
+                                   cropDamage, cropDamageExp) %>%
+        group_by(eventType) %>%
+        summarise(n = n(),
+                  people = as.numeric(sum(fatalities + injuries, na.rm = TRUE)),
+                  damage = as.numeric(sum(propDamage + cropDamage, na.rm = TRUE))) %>%
+        arrange(desc(n)) %>%
+        filter(people == 0 & damage == 0)
+noDamageEvents <- noDamageTable$eventType
+storms <- storms %>%
+        filter(!(eventType %in% noDamageEvents))
+nRecords3 <- nrow(storms)
+```
+
+At this stage there are `nRecords3` records.
+
+###Correct event types to assist matching and standardise against official codes:  
+```{r, echo = TRUE}
+storms$eventType <- gsub("TSTM", "THUNDERSTORM", storms$eventType)
+storms$eventType <- gsub("NON-THUNDERSTORM",  "STRONG", storms$eventType)
+storms$eventType <- gsub("NON THUNDERSTORM",  "STRONG", storms$eventType)
+storms$eventType <- gsub("CSTL",  "COASTAL", storms$eventType)
+storms$eventType <- gsub("  ",  " ", storms$eventType)
+
+event_types_standard <- read.table("event_types.csv",
+                                header = FALSE,
+                                sep = ",",
+                                col.names = c("stdEvType", "designator",
+                                              "keyTerm1", "keyTerm2",
+                                              "keyTerm3", "keyTerm4"))
+event_types_standard <- event_types_standard %>%
+        mutate(stdEvType = toupper(stdEvType),
+               keyTerm1 = toupper(keyTerm1),
+               keyTerm2 = toupper(keyTerm2),
+               keyTerm3 = toupper(keyTerm3),
+               keyTerm4 = toupper(keyTerm4))
+
+stdEvType <-event_types_standard$stdEvType
+keyTerm1 <- event_types_standard$keyTerm1
+keyTerm2 <- event_types_standard$keyTerm2
+keyTerm3 <- event_types_standard$keyTerm3
+keyTerm4 <- event_types_standard$keyTerm4
+
+events_to_match <- storms %>%
+        mutate(eventTypeMatch = eventType %in% stdEvType) %>%
+        filter(eventTypeMatch == "FALSE") %>%
+        select(eventType)
+events_to_match <- sort(unique(events_to_match$eventType))
+```
+
+Note that the event_types.csv file is available in the GitHub repository.
+
+Function to map events_to_match (x) against keyTerms (y) and stdEvType (z, default):  
+```{r, echo = TRUE}
+matchingGrep <-  function(x,y,z = stdEvType) {
+        output <- list(length(y))
+        for(i in 1:length(y)) {
+                output[[i]] <- x[grep(y[i], x)]
+        }
+        eventType <- as.vector(unlist(output))
+        n <- as.vector(unlist(sapply(output, length)))
+        match <- rep(z, times = n)
+        replacements <- tbl_df(as.data.frame(cbind(eventType, match)))
+        replacements <- replacements %>%
+                filter(!duplicated(eventType))
+        return(replacements)
+}
+```
+
+Use matchingGrep and the keyTerms in the event_types.csv file to standardise events:  
+```{r, echo = TRUE}
+replacements1 <- matchingGrep(events_to_match, keyTerm1)
+remove <- which(events_to_match %in% replacements1$eventType)
+events_to_match <- events_to_match[-remove]
+
+replacements2 <- matchingGrep(events_to_match, keyTerm2)
+remove <- which(events_to_match %in% replacements2$eventType)
+events_to_match <- events_to_match[-remove]
+
+replacements3 <- matchingGrep(events_to_match, keyTerm3)
+remove <- which(events_to_match %in% replacements3$eventType)
+events_to_match <- events_to_match[-remove]
+
+replacements4 <- matchingGrep(events_to_match, keyTerm4)
+remove <- which(events_to_match %in% replacements4$eventType)
+events_to_match <- events_to_match[-remove]
+
+replacements5 <- cbind(eventType = events_to_match,
+                       match = rep("OTHER", length(events_to_match)))
+
+# nonStandardEvents <- rbind(replacements1, replacements2, replacements3,
+#                             replacements4, replacements5)
+# write.csv(nonStandardEvents, file = "nonStandard_events.csv")
+
+stdEvents <- event_types_standard %>%
+                        select(eventType = stdEvType, match = keyTerm1)
+matchingTable <- rbind(replacements1, replacements2, replacements3,
+                                replacements4, replacements5,
+                                stdEvents)
+storms <- left_join(storms, matchingTable, by = "eventType")
+```
+
+The file nonStandardEvents.csv is available in the GitHub repository.
+
+###Review the variables and exclude all but 51 states:
+```{r, echo = TRUE}
+# review the variables
+uniqueValues <- sapply(storms, unique)
+sapply(uniqueValues, length)
+# indicates a problem with the number of states
+uniqueValues$state
+uniqueValues$stateCode
+
+# read in US state code data
+fipsCodes <- read.csv("US State FIPS codes.csv")
+includedStates <- which(storms$stateCode %in% fipsCodes$FIPS.Code)
+excludedStateCodes <- sort(unique(storms$stateCode[-includedStates]))
+excludedEntries <- filter(storms, stateCode %in% excludedStateCodes)
+excludedStates <- sort(unique(excludedEntries$state))
+#select data
+stormsData <- storms %>%
+                mutate(propDamageCost = propDamage * propDamageExp,
+                        cropDamageCost = cropDamage * cropDamageExp) %>%
+                rename(event = match,
+                       FIPS.code = stateCode) %>%
+                filter(!(FIPS.code %in% excludedStateCodes)) %>%
+                select(refNum, beginDate, state, event,
+                       fatalities, injuries,
+                       propDamageCost, cropDamageCost) %>%
+                mutate(state = as.factor(state))
+nRecords4 <- nrow(stormsData)
+```
+
+At this stage there are `nRecords4` records.
+
+The US State FIPS codes.csv file is available in the GitHub repository. There were more states than expected and some of the additional areas were neither in the extended FIPS codes (protectorates) or supplemental maritime codes.
+
+Further restrict the analysis to entries where there are effects on people, property or crops:  
+```{r, echo = TRUE}
+stormsData <- stormsData %>%
+                filter(fatalities > 0 | injuries > 0 | 
+                               propDamageCost > 0 | cropDamageCost)
+nRecords5 <- nrow(stormsData)
+```
+
+At this stage there are `nRecords5` records.
+
+###Check for outliers, adjust if appropriate, remove source file, and select data:  
+```{r, echo = TRUE}
+Mydotplot <- function(DataSelected){
+        P <- dotplot(as.matrix(as.matrix(DataSelected)),
+                     groups = FALSE,
+                     strip = FALSE,
+                     # strip = strip.custom(bg = 'white',
+                     # par.strip.text = list(cex = 1.2)),
+                     scales = list(x = list(relation = "free", draw = TRUE),
+                                   y = list(relation = "free", draw = FALSE)),
+                     col=1, cex  = 0.5, pch = 16,
+                     xlab = list(label = "Cost($)", cex = 1.5),
+                     ylab = list(label = "Order of data", cex = 1.5),
+                     main = list(label = "Cleveland Dotplot", cex = 1.75))
+        print(P)  
+}
+
+# png(filename = "EDA_propDamageCost.png", width = 600, height = 480)
+# par(mfrow = c(1,1))
+# Mydotplot(stormsData$propDamageCost)
+# dev.off()
+# par(mfrow = c(1, 1))
+
+# outlier identified and changed (million, not billion)
+stormsData[which(stormsData$propDamageCost > 1.0e+11), ]
+outlier <- storms[which(storms$refNum == 605943), ]
+outlier[ c(11:16)]
+stormsData[which(stormsData$refNum == 605943), 7] <- 1.15e+8
+
+# potential outlier identified as Hurricane Katrina (see below)
+stormsData[which(stormsData$propDamageCost > 2.0e+10), ]
+outlier <- storms[which(storms$refNum == 577616), ]
+outlier[ c(11:14)]
+
+# png(filename = "EDA_cropDamageCost.png", width = 600, height = 480)
+# par(mfrow = c(1,1))
+# Mydotplot(stormsData$cropDamageCost)
+# dev.off()
+# par(mfrow = c(1, 1))
+
+# potential outlier identified as Hurricane Katrina (unchanged)
+stormsData[which(stormsData$cropDamageCost > 1.5e+9), ]
+outlier <- storms[which(storms$refNum == 577616), ]
+outlier[ c(11:14)]
+
+rm(storms)
+
+stormsData$date = as.POSIXlt(stormsData$beginDate)
+stormsData$year = stormsData$date$year + 1900
+
+stormsData <- stormsData %>%
+                select(refNum, beginDate, year, state, event,
+                        fatalities, injuries,
+                        propDamageCost, cropDamageCost)
+nrecords6 <- nrow(stormsData)
+```
+
+At this stage there are `nRecords6` records.
+
+The exploratory Cleveland dotplots are available in the GitHub repository. There was one clear outlier where the damage was measured in billions rather than millions (from other available sources) so this was adjusted. The apparent outliers related to Hurricane Katrina were not adjusted as it was estimated that that event caused property damage in excess of $80 billion.
+
+#Results
+
+##Time Series
+The human cost of storm events has been evaluated in terms of "fatalities" and "injuries". Figure 1 shows the totals attributed per annum to storm events in the US (51 states) over the period 1996-2011. 
+```{r Figure 1, echo = TRUE}
+annualHumanData <- group_by(stormsData, year) %>%
+                        summarise(Fatalities = sum(fatalities),
+                                Injuries = sum(injuries))
+par(mfrow = c(2,1))
+barplot(height = annualHumanData$Fatalities, names.arg = annualHumanData$year,
+        main = "Annual US Storm Fatalities 1996-2011",
+        xlab = "Year",
+        ylab = "Fatalities")
+barplot(height = annualHumanData$Injuries, names.arg = annualHumanData$year,
+        main = "Annual US Storm Injuries 1996-2011",
+        xlab = "Year",
+        ylab = "Injuries")
+par(mfrow = c(1,1))
+```
+
+
+The economic cost of storm events has been evaluated in terms of damage to property and crops measured in billions of dollars. Figure 2 shows the totals attributed to storm events in the US (51 states) over the last 5 years (2007-2011) as this was thought to be the period most relevant to decision-makers. No adjustment has been made for inflation over this relatively short period when the rates have been relatively low in any case.
+```{r Figure 2, echo = TRUE}
+annualEconomicData <- filter(stormsData, year >= 2007) %>%
+                        group_by(year) %>%
+                        summarise(PropertyDamage = sum(propDamageCost/1.0e+9),
+                                CropDamage = sum(cropDamageCost/1.0e+9))
+par(mfrow = c(2,1))
+barplot(height = annualEconomicData$PropertyDamage, names.arg = annualEconomicData$year,
+        main = "Annual US Property Damage 2007-2011",
+        xlab = "Year",
+        ylab = "Dollars(billions)")
+barplot(height = annualEconomicData$CropDamage, names.arg = annualEconomicData$year,
+        main = "Annual US Crop Damage 2007-2011",
+        xlab = "Year",
+        ylab = "Dollars(billions)")
+par(mfrow = c(1,1))
+```
+
+##Contributions of different events to human and economic costs
+In considering which types of storm event have contributed most to human or economic costs I have only used the 'official' classifications of event type, although further analysis might permit similar event types to be grouped together. The following table shows the number of fatalities and injuries attributable to individual storm events over the last 5 years. Only the top 10 events are shown (by total injuries/fatalities).
+# ```{r xtable, results="asis"}
+# annualHumanData_byEvent <- filter(stormsData, year >= 2007) %>%
+#         group_by(event) %>%
+#         summarise(Fatalities = sum(fatalities),
+#                   Injuries = sum(injuries)) %>%
+#         arrange(desc(Fatalities + Injuries))
+# humanImpact <- annualHumanData_byEvent %>%
+#         filter(Fatalities + Injuries >= 320) %>%
+#         rename(Event = event)
+# tab <- xtable(annualHumanData_byEvent)
+# print(tab, type="html")
+# ```
+
+
+The following table shows the costs (in billions of dollars) of property and crop damage attributable to individual storm events over the last 5 years. Only the top 10 events are shown (by total damage).
+# ```{r xtable, results="asis"}
+# annualEconomicData_byEvent <- filter(stormsData, year >= 2007) %>%
+#         group_by(event) %>%
+#         summarise(PropertyDamage = sum(propDamageCost/1.0e+9),
+#                   CropDamage = sum(cropDamageCost/1.0e+9),
+#                   TotalDamage = PropertyDamage + CropDamage) %>%
+#         arrange(desc(PropertyDamage + CropDamage))
+# economicImpact <- annualEconomicData_byEvent %>%
+#                 filter(TotalDamage >= 0.92) %>%
+#                 rename(Event = event, Property = PropertyDamage,
+#                        Crops = CropDamage,  Total = TotalDamage)
+# tab <- xtable(economicImpact, digits = c(0, 2, 2, 2))
+# print(tab, type="html")
+# ```
+
+---
+On completion, reset current working directory to initial wd (optional):
+```{r, echo = TRUE}
+# setwd("../")
+```
+
+---
+
+[1]: https://www.ncdc.noaa.gov/stormevents/details.jsp "eventTypes"
+[2]: http://www.columbia.edu/~sue/state-fips.html "FIPScodes"
+[3]: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf "stormDatadocs"
+[4]: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf "FAQ"
+[5]: http://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/Storm-Data-Export-Format.docx "exportFormat"

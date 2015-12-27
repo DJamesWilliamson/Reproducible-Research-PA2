@@ -1,0 +1,48 @@
+Astronomical Low Tide,Z,Astronomical Low Tide,astronomical low,astronomical low,astronomical low
+Avalanche,Z,Avalanche,avalanche,avalanche,avalanche
+Blizzard,Z,Blizzard,blizzard,blizzard,blizzard
+Coastal Flood,Z,Coastal Flood,coastal,tidal,beach
+Cold/Wind Chill,Z,Cold/Wind Chill,cold/wind,cold,exposure
+Debris Flow,C,Debris Flow,debris,debris,debris
+Dense Fog,Z,Dense Fog,fog,fog,fog
+Dense Smoke,Z,Dense Smoke,smoke,smoke,smoke
+Drought,Z,Drought,drought,drought,drought
+Dust Devil,C,Dust Devil,devil,devil,devil
+Dust Storm,Z,Dust Storm,dust,dust,dust
+Excessive Heat,Z,Excessive Heat,heat,heat,heat
+Extreme Cold/Wind Chill,Z,Extreme Cold/Wind Chill,wind chill,cold,chill
+Flash Flood,C,Flash Flood,flash,flash,flash
+Flood,C,Flood,flood,high water,fld
+Frost/Freeze,Z,Frost/Freeze,frost,ice,freez
+Funnel Cloud,C,Funnel Cloud,funnel,cloud,cloud
+Freezing Fog,Z,Freezing Fog,freezing fog,freezing fog,freezing fog
+Hail,C,Hail,hail,hail,hail
+Heat,Z,Heat,heat,warm,warm
+Heavy Rain,C,Heavy Rain,heavy rain,rain,rain
+Heavy Snow,Z,Heavy Snow,snow,snow,snow
+High Surf,Z,High Surf,surf,surf,surf
+High Wind,Z,High Wind,high wind,wind,wind
+Hurricane (Typhoon),Z,Hurricane (Typhoon),hurricane,typhoon,typhoon
+Ice Storm,Z,Ice Storm,icy,icy,ice
+Lake-Effect Snow,Z,Lake-Effect Snow,lake effect,lake-effect,snow
+Lakeshore Flood,Z,Lakeshore Flood,lake shore,lakeshore,lake
+Lightning,C,Lightning,lightning,lightning,lightning
+Marine Hail,M,Marine Hail,marine hail,marine hail,marine hail
+Marine High Wind,M,Marine High Wind,marine,wave,wave
+Marine Strong Wind,M,Marine Strong Wind, seas, seas,swell
+Marine Thunderstorm Wind,M,Marine Thunderstorm Wind,marine wind,marine wind,marine wind
+Rip Current,Z,Rip Current,rip,rip,rip
+Seiche,Z,Seiche,seiche,seiche,seiche
+Sleet,Z,Sleet,sleet,sleet,sleet
+Storm Surge/Tide,Z,Storm Surge/Tide,surg,high tide,high tide
+Strong Wind,Z,Strong Wind,strong wind,wind,wind
+Thunderstorm Wind,C,Thunderstorm Wind,thunderstorm,thunderstorm,thunderstorm
+Tornado,C,Tornado,tornado,tornado,tornado
+Tropical Depression,Z,Tropical Depression,tropical depression,tropical depression,tropical depression
+Tropical Storm,Z,Tropical Storm,tropical storm,tropical storm,tropical storm
+Tsunami,Z,Tsunami,tsunami,tsunami,tsunami
+Volcanic Ash,Z,Volcanic Ash,volcan,volcan,volcan
+Waterspout,M,Waterspout,waterspout,waterspout,waterspout
+Wildfire,Z,Wildfire,fire,fire,fire
+Winter Storm,Z,Winter Storm,winter storm,winter storm,winter storm
+Winter Weather,Z,Winter Weather,winter,wintry,wintry
